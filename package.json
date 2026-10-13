@@ -1,0 +1,51 @@
+{
+  "name": "dsh-session-tools",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness (dsh) 插件：在侧栏会话「...」菜单里加一行「复制会话 ID」，一键把 session-xxx 复制到剪贴板",
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    },
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "session",
+    "copy-session-id",
+    "cordis"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SongZcode/dsh-session-tools.git"
+  },
+  "homepage": "https://github.com/SongZcode/dsh-session-tools#readme",
+  "bugs": {
+    "url": "https://github.com/SongZcode/dsh-session-tools/issues"
+  },
+  "license": "MIT"
+}

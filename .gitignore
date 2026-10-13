@@ -1,0 +1,11 @@
+# 依赖 / 构建产物（插件本体只有 4 个文件：package.json / index.js / client.js / cordis.patch.yml）
+node_modules/
+package-lock.json
+pnpm-lock.yaml
+
+# 本地备份与杂物（历史改动留档，不进公开仓库）
+*.bak-*
+*.log
+__pycache__/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,7 @@
+# dsh-session-tools 的 bundle 层：往 profile 的 loader 里插一行（宿主半侧 index.js）。
+# 宿主半侧本身什么都不注册，这一行只是让本包成为「loaded entry」——
+# 客户端半侧（dsh.client + exports["./client"]）只会被发现于已加载的 entry 上，
+# 少了这一层，整个 bundle 会被 loadProfileDirectory 当 "declares no dsh.bundle" 静默跳过。
+- insert:
+    - id: dsh-session-tools
+      name: 'dsh-session-tools'

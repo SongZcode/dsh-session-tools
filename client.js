@@ -1,5 +1,5 @@
 /* dsh-session-tools —— 客户端半侧（web）
- * 唯一功能：会话「...」菜单里加一行「复制会话 ID」（从 @local/agent-bus 拆出，二者互不依赖）。
+ * 唯一功能：会话「...」菜单里加一行「复制会话 ID」，点一下把 session-xxx 放进剪贴板。
  *
  * 防重：同一个 bundle 若被执行两次（HMR/重复装载），重复注册错误会被吸收；
  * 这样既不让 web boot 失败，也允许 loader 失效后重新注册新的 factory。

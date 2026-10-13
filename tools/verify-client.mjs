@@ -1,26 +1,26 @@
 #!/usr/bin/env node
-/* dsh-session-tools 离线加载器验证（tools/verify-client.mjs）
+/* dsh-session-tools 离线自检（tools/verify-client.mjs）
  *
- * 干什么：在不启动 DSH 的情况下，用假 window.__ModuleLoader__ / 假 ctx / 假 react 跑一遍 client.js，
- * 断言宿主契约（id、name、inject、apply、槽位注册、order、效果标签）都对，并**复现重复注册报错**。
+ * 干什么：不启动 dsh，用假的 window.__ModuleLoader__ / 假 ctx / 假 react 把 client.js 真跑一遍，
+ * 断言宿主契约（注册 id、name、inject、apply、槽位注册、order、清理标签）都成立，
+ * 并**复现"同一 bundle 被执行两次"的重复注册报错**，确认它被吸收而不是炸掉 web 启动。
  *
- * 为什么要有它：客户端半侧的锅全在启动期暴露（web boot 失败会连设置页/联网搜索一起挂）。
- * 改完 client.js 先跑这个，再问用户重启 —— 「能离线验不直接重启」。
+ * 为什么要有它：客户端半侧的错全发生在启动期（web boot 失败会连设置页、联网搜索一起挂），
+ * 而重启 dsh 才发现问题的代价很高。改完 client.js 先跑这个。
  *
  * 用法：
- *   node F:\dsh-plugins\dsh-session-tools\tools\verify-client.mjs
- *   node <本文件> --client <其它包的 client.js> --pkg-id <该包的 npm 名>   # 校验别的插件
- *   node <本文件> --expect-missing --client F:\agent_bus\dsh-plugin\client.js   # 反向验证旧文件已挪走
+ *   node tools/verify-client.mjs                                  # 自检本包
+ *   node tools/verify-client.mjs --client <别的包>/client.js       # 校验任意同规格插件
+ *   node tools/verify-client.mjs --profile <profile 目录>          # 额外核对 profile 接线
  *
  * 退出码：0 = 全过；1 = 有 FAIL。
  */
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
 // fileURLToPath 才认得 Windows 盘符路径（别自己剥前导斜杠）
 const PKG_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const PROFILE = join(process.env.USERPROFILE || 'C:\\Users\\17236', '.dsh', 'profiles', 'desktop');
 
 function arg(name, fallback) {
   const i = process.argv.indexOf('--' + name);
@@ -287,43 +287,40 @@ if (PKG.dsh && PKG.dsh.client) {
   check('package.json 声明了 dsh.client 才需要跑客户端验证', false, '当前包没声明 dsh.client');
 }
 
-/* ---------- 4) profile 接线核对（默认启用是否真的接上了） ---------- */
-try {
-  const profilePkg = JSON.parse(readFileSync(join(PROFILE, 'package.json'), 'utf8'));
-  const deps = profilePkg.dependencies || {};
-  const bundles = ((profilePkg.dsh || {}).profile || {}).bundles || [];
-  check('profile.dependencies 有本包（link:）', !!deps[ID], String(deps[ID] || '缺失'));
-  check('profile.bundles 含本包（默认启用）', bundles.includes(ID), bundles.join(', '));
+/* ---------- 4) profile 接线核对（只在显式给了 --profile 时跑） ----------
+ * 平时不跑：本包是个通用插件，不该假定使用者把 profile 放在哪里。
+ * 想核对"装进我的 profile 了吗"就传 `--profile <profile 目录>`。 */
+const PROFILE_ARG = arg('profile', '');
+if (PROFILE_ARG) {
+  const profileDir = resolve(PROFILE_ARG);
+  try {
+    const profilePkg = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8'));
+    const deps = profilePkg.dependencies || {};
+    const bundles = ((profilePkg.dsh || {}).profile || {}).bundles || [];
+    check('profile.dependencies 有本包', !!deps[ID], String(deps[ID] || '缺失'));
+    check('profile.bundles 含本包（已启用）', bundles.includes(ID), bundles.join(', '));
 
-  const linked = join(PROFILE, 'node_modules', ...ID.split('/'));
-  check('link 落地：profile node_modules 能解析到本包', existsSync(join(linked, 'package.json')), linked);
-  const viaProfile = join(PROFILE, 'node_modules', ...ID.split('/'), 'client.js');
-  check('profile 侧 client.js 可见（宿主就是从这里取 bundle）', existsSync(viaProfile), viaProfile);
+    const linked = join(profileDir, 'node_modules', ...ID.split('/'));
+    check('profile node_modules 能解析到本包', existsSync(join(linked, 'package.json')), linked);
+    const viaProfile = join(profileDir, 'node_modules', ...ID.split('/'), 'client.js');
+    check('profile 侧 client.js 可见（宿主就是从这里取 bundle）', existsSync(viaProfile), viaProfile);
 
-  // dsh.client.inject 是「声明式依赖边」：按宿主契约从两个锚点解析——装好的 dsh 应用 + 本 profile
-  // （见 dsh-app-boot 的 resolveBundleDir：installAnchor 优先，profileDir 兜底）。
-  const appModules = process.env.DSH_APP_MODULES
-    || join(process.env.LOCALAPPDATA || join(process.env.USERPROFILE || 'C:\\Users\\17236', 'AppData', 'Local'),
-      'Programs', 'DeepSeek Harness', 'resources', 'app', 'dsh', 'node_modules');
-  const resolvesFrom = [join(PROFILE, 'node_modules'), appModules];
-  const missingInject = injectList.filter((dep) => {
-    const rel = String(dep).split('/');
-    return !resolvesFrom.some((base) => existsSync(join(base, ...rel, 'package.json')));
-  });
-  check('dsh.client.inject 里的包在 DSH 应用/profile 里能解析', missingInject.length === 0,
-    missingInject.length ? '解析不到: ' + missingInject.join(', ') : injectList.length + ' 条都能解析（锚点: 应用 + profile）');
-  // 踩过：从 dsh-purge 抄 inject 列表，抄进来一个根本不存在的包名（应用里没有这个目录）——
-  // 悬空依赖边不会炸启动，但会在 web 插件表里留一条假边，排查时误导人。这里专门盯住。
-  const PHANTOM = ['@deepseek-ai/dsh-client-runtime'];
-  const phantoms = injectList.filter((dep) => PHANTOM.includes(dep));
-  check('没有抄来的幽灵依赖（如 dsh-client-runtime）', phantoms.length === 0,
-    phantoms.length ? '应删: ' + phantoms.join(', ') : '已清干净');
-
-  const localScope = join(PROFILE, 'node_modules', '@local');
-  check('@local 作用域目录干净（无重复/残留安装）', existsSync(localScope),
-    existsSync(localScope) ? readdirSync(localScope).join(', ') : '（还没建，npm install 会建）');
-} catch (e) {
-  check('profile 接线核对', false, String(e && e.message).slice(0, 120));
+    // dsh.client.inject 是「声明式依赖边」：按宿主契约从两个锚点解析 —— 装好的 dsh 应用 + 本 profile
+    // （见 dsh-app-boot 的 resolveBundleDir：installAnchor 优先，profileDir 兜底）。
+    const appModules = process.env.DSH_APP_MODULES;
+    const anchors = [join(profileDir, 'node_modules')];
+    if (appModules) anchors.push(appModules);
+    const missingInject = injectList.filter((dep) => {
+      const rel = String(dep).split('/');
+      return !anchors.some((base) => existsSync(join(base, ...rel, 'package.json')));
+    });
+    check('dsh.client.inject 里的包能解析', missingInject.length === 0,
+      missingInject.length
+        ? '解析不到: ' + missingInject.join(', ') + '（设 DSH_APP_MODULES=<dsh 安装目录>/node_modules 可一起核对）'
+        : injectList.length + ' 条都能解析');
+  } catch (e) {
+    check('profile 接线核对', false, String(e && e.message).slice(0, 120));
+  }
 }
 
 const failed = results.filter((r) => !r.ok);

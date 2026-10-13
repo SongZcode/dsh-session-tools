@@ -1,80 +1,105 @@
 # dsh-session-tools
 
-> DeepSeek Harness（dsh）插件：在侧栏会话行「...」菜单里加一行 **「复制会话 ID」** —— 点一下就把 `session-xxxxxxxx-…` 复制到剪贴板。
+为 DeepSeek Harness（dsh）添加 **「复制会话 ID」** 菜单项。在侧栏找到会话，打开「…」菜单，即可复制该会话的 ID，供其他工具使用或用于反馈问题。
 
-会话 ID 在 dsh 里到处要用：指认一条会话、把它交给别的工具或 agent、在日志里对号入座 —— 但界面里并不好取。这个插件把"找到并复制"压成一次点击。
+![会话菜单中的「复制会话 ID」](./screenshot.png)
 
-![菜单效果](./screenshot.png)
+## 使用要求
 
-*（截图：会话「...」菜单里的「复制会话 ID」。）*
+- 已安装并能正常运行 dsh。本插件已在 **dsh 0.2.0-rc.2** 上验证，其他版本尚未验证。
+- 适用于加载 dsh web 客户端的环境。
+- 安装时需要 Git、Node.js 18 或更新版本，以及该 profile 使用的包管理器。
+
+本项目是独立的社区插件。
 
 ## 安装
 
-### 方式一：从 GitHub 装（推荐）
+### 1. 找到当前使用的 profile
 
-在 dsh 的 profile（如 `~/.dsh/profiles/desktop/package.json`）里加依赖：
+找到 dsh 当前使用的 profile 目录，并备份其中的 `package.json`。例如，desktop profile 可能位于 `~/.dsh/profiles/desktop/`；请以自己的实际配置为准。
 
-```jsonc
-{ "dependencies": { "dsh-session-tools": "github:SongZcode/dsh-session-tools" } }
-```
+### 2. 添加依赖并启用插件
 
-### 方式二：本地目录 + 链接（改代码时用）
+编辑该 profile 的 `package.json`：
 
-```jsonc
+- 在 `dependencies` 中添加 `dsh-session-tools`。
+- 在 `dsh.profile.bundles` 数组中添加 `dsh-session-tools`。
+
+下面是需要合并的配置示例。**保留原有依赖、bundles 和其他字段，不要用示例覆盖整个文件。**
+
+```json
 {
-  "dependencies": { "dsh-session-tools": "link:/path/to/dsh-session-tools" },
-  "dsh": { "profile": { "bundles": ["…", "dsh-session-tools"] } }
+  "dependencies": {
+    "dsh-session-tools": "github:SongZcode/dsh-session-tools"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": ["dsh-session-tools"]
+    }
+  }
 }
 ```
 
-装完**重启 dsh**（客户端半侧只在 web 启动时装载）。
+### 3. 安装依赖并重启
 
-## 行为
+在 profile 目录中，使用该 profile 原有的包管理器安装依赖。例如，使用 npm 的 profile 执行：
 
-| 项 | 值 |
-|---|---|
-| 槽位 | `sidebar.workspaces.session.menu.item` |
-| 该项 id | `dsh-session-tools-copy-id` |
-| order | `350`（宿主自带项占 `100/200/300/400`，本项落在 `fork` 与 `archive` 之间） |
-| 点击 | `navigator.clipboard.writeText(sessionId)` → 文案变「已复制 ✓」→ 1 秒后复原并关闭菜单 |
-| 样式 | 与会话菜单其他项保持一致；跟随宿主的 dense / compact 变体 |
-| 启动失败 | 只 warn，不阻断页面加载 |
+```sh
+npm install
+```
 
-## 配置
+如果原有项目使用 pnpm 或 Yarn，请使用对应的安装命令，避免混用锁文件。
 
-本插件没有配置项 —— 装了就生效，菜单里多一行。
+完全退出并重新启动 dsh。打开任意会话的「…」菜单，确认出现 **「复制会话 ID」**。
+
+## 使用
+
+1. 在 dsh 侧栏找到要复制 ID 的会话。
+2. 打开该会话的「…」菜单。
+3. 点击「复制会话 ID」。
+4. 将 ID 粘贴到需要的位置。复制的是类似 `session-…` 的会话标识，不是会话标题或聊天内容。
+
+本插件无需额外配置。如果环境未提供剪贴板接口，插件会尝试显示手动复制对话框。
+
+## 更新
+
+在 profile 目录中，使用原有包管理器更新 `dsh-session-tools`，然后完全退出并重新启动 dsh。例如，npm 用户可以执行：
+
+```sh
+npm update dsh-session-tools
+```
+
+GitHub 依赖可能被锁文件固定在某次提交；更新后可检查锁文件中的提交是否发生变化。
 
 ## 卸载
 
-1. 从 profile 的 `dependencies` 移除本包（本地链接方式还要删掉 `node_modules` 里的链接）→ 重启。
-2. 想留包但关掉菜单项：从本包 `package.json` 删掉 `"dsh": { "client": … }` 与 `exports["./client"]` → 重启。
+1. 从 profile 的 `dsh.profile.bundles` 中移除 `dsh-session-tools`。
+2. 从 `dependencies` 中移除 `dsh-session-tools`。
+3. 在 profile 目录重新运行原有包管理器的安装命令，更新依赖和锁文件。
+4. 完全退出并重新启动 dsh。
 
-## 已知问题与排查
+如果只是暂时停用，完成第 1 步并重启即可。
 
-| 现象 | 原因 | 做法 |
-|---|---|---|
-| 菜单里没有这一项 | 客户端半侧没被加载（`exports["./client"]` 或 `dsh.client` 缺失/写错，宿主会静默跳过） | 检查本包 `package.json` 的两个字段，然后重启 dsh |
-| 整包不生效、日志里说跳过 | bundle 没声明 `dsh.bundle` | 确认 `cordis.patch.yml` 存在且 `package.json` 里指向它 |
-| 页面起不来 | 客户端脚本注册的 id 与包名不一致（撞上已注册的 factory） | 注册 id 必须是 npm 包名 |
-| 菜单项位置不对 | order 与其他插件撞车 | 改 `client.js` 里的 `ORDER`（避开 100/200/300/400） |
-| 改了没反应 | 插件目录同时被 HMR 监听，与 loader 叠加重复执行 | 别把插件目录加进 `hmr.root` |
+## 常见问题
 
-## 兼容性
+### 安装后没有「复制会话 ID」
 
-- dsh：**0.2.0-rc.2** 验证通过（`dsh.client.platform = "web"`）。
-- 依赖的宿主面：会话菜单槽位 `sidebar.workspaces.session.menu.item`，其 ownerProps 为 `sessionId` / `displayTitle`。
-  宿主大版本升级后若菜单项不再出现，多半是这个契约变了。
+确认修改的是当前使用的 profile；检查依赖和 `dsh.profile.bundles` 是否都已添加本包，依赖安装是否成功，然后完全退出并重新启动 dsh。若仍未出现，请检查 dsh 版本是否为已验证版本。
 
-## 开发者：离线自检
+### 点击后无法粘贴
 
-```powershell
-node tools/verify-client.mjs          # 期望 38/38
-```
+剪贴板写入可能被浏览器权限或运行环境限制。先尝试在普通文本输入框中粘贴，并检查剪贴板权限。如果显示手动复制对话框，请从对话框中复制 ID。当前版本的「已复制」提示不能保证异步剪贴板写入成功。
 
-用一个假加载器 + 假 react + 假槽位服务把 `client.js` 真跑一遍，断言注册 id、槽位注入、order、
-组件渲染、ownerProps 两种传参，以及**同 id 二次注册必须被吸收**（附一条反面对照）。
-客户端半侧的错都发生在启动期，这条自检能在不重启 dsh 的前提下先把问题挡住。
+### 提示「拿不到会话 ID」
 
-## 许可
+重新打开目标会话的菜单再试。如果仍然出现，可能与当前 dsh 版本的兼容性有关，请提交问题反馈。
 
-MIT
+## 反馈与贡献
+
+遇到问题或有功能建议，请到 [Issues](https://github.com/SongZcode/dsh-session-tools/issues) 反馈。请附上 dsh 版本、操作系统、安装方式、复现步骤，以及必要的截图或报错信息；发布前请隐藏私人会话内容和其他敏感信息。
+
+欢迎提交 Pull Request。开发和验证方法见 [贡献指南](./CONTRIBUTING.md)。
+
+## 许可证
+
+[MIT](./LICENSE)
